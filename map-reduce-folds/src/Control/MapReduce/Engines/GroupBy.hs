@@ -47,6 +47,8 @@ module Control.MapReduce.Engines.GroupBy
   , groupByBubble'
   , groupByTree1
   , groupByNaiveInsert2
+  , foo
+  , groupByFoo
   )
 where
 
@@ -75,7 +77,7 @@ It might be faster to do this in-line but it seems to complicate things...
 -}
 promote :: (k, v) -> (k, DList v)
 promote (k, v) = (k, [v])
-{-# INLINABLE promote #-}
+{-# INLINE promote #-}
 
 unDList = fmap (second DL.toList)
 
@@ -89,7 +91,7 @@ specify
   -> t
 specify f = g
   where g = f (compare `on` fst) (\(k, x) (_, y) -> (k, DL.append x y))
-{-# INLINABLE specify #-}
+{-# INLINE specify #-}
 
 {-
 Following <https://www.cs.ox.ac.uk/ralf.hinze/publications/Sorting.pdf>,
@@ -117,12 +119,12 @@ coalg1 cmp f (Cons a (a' : l)) = case cmp a a' of
   LT -> Cons a (Cons a' l)
   GT -> Cons a' (Cons a l)
   EQ -> Cons (f a a') (RS.project l)
-{-# INLINABLE coalg1 #-}
+{-# INLINE coalg1 #-}
 
 groupByNaiveInsert :: Ord k => [(k, v)] -> [(k, [v])]
 groupByNaiveInsert =
   unDList . RS.fold (RS.unfold (specify coalg1)) . fmap promote
-{-# INLINABLE groupByNaiveInsert #-}
+{-# INLINE groupByNaiveInsert #-}
 
 {-
 now we do this in the other order
@@ -137,17 +139,17 @@ alg1
   -> ListF a (ListF a [a])
   -> ListF a [a]
 alg1 _   _ Nil                   = Nil
-alg1 _   _ (Cons a Nil         ) = Cons a []
-alg1 cmp f (Cons a (Cons a' as)) = case cmp a a' of
+alg1 _   _ (Cons !a Nil         ) = Cons a []
+alg1 cmp f (Cons !a (Cons !a' as)) = case cmp a a' of
   LT -> Cons a (a' : as)
   GT -> Cons a' (a : as)
   EQ -> Cons (f a a') as
-{-# INLINABLE alg1 #-}
+{-# INLINE alg1 #-}
 
 groupByNaiveBubble :: Ord k => [(k, v)] -> [(k, [v])]
 groupByNaiveBubble =
   unDList . RS.unfold (RS.fold (specify alg1)) . fmap promote
-{-# INLINABLE groupByNaiveBubble #-}
+{-# INLINE groupByNaiveBubble #-}
 
 {-
 Some notes at this point:
@@ -167,22 +169,22 @@ swap
   -> ListF a (ListF a [a])
   -> ListF a (ListF a [a])
 swap _   _ Nil                   = Nil
-swap _   _ (Cons a Nil         ) = Cons a Nil
-swap cmp f (Cons a (Cons a' as)) = case cmp a a' of
+swap _   _ (Cons !a Nil         ) = Cons a Nil
+swap cmp f (Cons !a (Cons !a' as)) = case cmp a a' of
   LT -> Cons a (Cons a' as) -- already in order
   GT -> Cons a' (Cons a as) -- need to swap
   EQ -> Cons (f a a') (RS.project as)
-{-# INLINABLE swap #-}
+{-# INLINE swap #-}
 
 groupByNaiveInsert' :: Ord k => [(k, v)] -> [(k, [v])]
 groupByNaiveInsert' =
   unDList . RS.fold (RS.unfold (specify swap . fmap RS.project)) . fmap promote
-{-# INLINABLE groupByNaiveInsert' #-}
+{-# INLINE groupByNaiveInsert' #-}
 
 groupByNaiveBubble' :: Ord k => [(k, v)] -> [(k, [v])]
 groupByNaiveBubble' =
   unDList . RS.unfold (RS.fold (fmap RS.embed . specify swap)) . fmap promote
-{-# INLINABLE groupByNaiveBubble' #-}
+{-# INLINE groupByNaiveBubble' #-}
 
 
 {-
@@ -201,16 +203,16 @@ apoCoalg
   -> ListF a [a]
   -> ListF a (Either [a] (ListF a [a]))
 apoCoalg _   _ Nil                = Nil
-apoCoalg _   _ (Cons a []       ) = Cons a (Left []) -- could also be 'Cons a (Right Nil)'
-apoCoalg cmp f (Cons a (a' : as)) = case cmp a a' of
+apoCoalg _   _ (Cons !a []       ) = Cons a (Left []) -- could also be 'Cons a (Right Nil)'
+apoCoalg cmp f (Cons !a (a' : as)) = case cmp a a' of
   LT -> Cons a (Left (a' : as)) -- stop recursing here
   GT -> Cons a' (Right (Cons a as)) -- keep recursing, a may not be in the right place yet!
   EQ -> Cons (f a a') (Left as) -- ??
-{-# INLINABLE apoCoalg #-}
+{-# INLINE apoCoalg #-}
 
 groupByInsert :: Ord k => [(k, v)] -> [(k, [v])]
 groupByInsert = unDList . RS.fold (RS.apo (specify apoCoalg)) . fmap promote
-{-# INLINABLE groupByInsert #-}
+{-# INLINE groupByInsert #-}
 
 {-
 Now we go the other way and then get both versions as before.
@@ -224,16 +226,16 @@ paraAlg
   -> ListF a ([a], ListF a [a])
   -> ListF a [a]
 paraAlg _    _  Nil                       = Nil
-paraAlg _    _  (Cons a (_, Nil        )) = Cons a []
-paraAlg !cmp !f (Cons a (_, Cons a' as')) = case cmp a a' of
+paraAlg _    _  (Cons !a (_, Nil        )) = Cons a []
+paraAlg !cmp !f (Cons !a (_, Cons !a' as')) = case cmp a a' of
   LT -> Cons a (a' : as')
   GT -> Cons a' (a : as')
   EQ -> Cons (f a a') as'
-{-# INLINABLE paraAlg #-}
+{-# INLINE paraAlg #-}
 
 groupByBubble :: Ord k => [(k, v)] -> [(k, [v])]
 groupByBubble = unDList . RS.unfold (RS.para (specify paraAlg)) . fmap promote
-{-# INLINABLE groupByBubble #-}
+{-# INLINE groupByBubble #-}
 
 {-
 We observe, as before, apoCoalg and paraAlg are very similar, though it's less clear here.
@@ -253,26 +255,26 @@ swop
   -> ListF a ([a], ListF a [a])
   -> ListF a (Either [a] (ListF a [a]))
 swop _   _ Nil                        = Nil
-swop _   _ (Cons a (as, Nil        )) = Cons a (Left as)
-swop cmp f (Cons a (as, Cons a' as')) = case cmp a a' of
+swop _   _ (Cons !a (as, Nil        )) = Cons a (Left as)
+swop cmp f (Cons !a (as, Cons !a' as')) = case cmp a a' of
   LT -> Cons a (Left as)
   GT -> Cons a' (Right (Cons a as'))
   EQ -> Cons (f a a') (Left as')
-{-# INLINABLE swop #-}
+{-# INLINE swop #-}
 
 groupByInsert' :: Ord k => [(k, v)] -> [(k, [v])]
 groupByInsert' =
   unDList
     . RS.fold (RS.apo (specify swop . fmap (id &&& RS.project)))
     . fmap promote
-{-# INLINABLE groupByInsert' #-}
+{-# INLINE groupByInsert' #-}
 
 groupByBubble' :: Ord k => [(k, v)] -> [(k, [v])]
 groupByBubble' =
   unDList
     . RS.unfold (RS.para (fmap (id ||| RS.embed) . specify swop))
     . fmap promote
-{-# INLINABLE groupByBubble' #-}
+{-# INLINE groupByBubble' #-}
 
 
 
@@ -290,6 +292,13 @@ data Tree a where
 
 RS.makeBaseFunctor ''Tree
 
+data Tree2 a where
+  Tip2 :: Tree2 a
+  Leaf2 :: a -> Tree2 a
+  Fork2 :: a -> Tree2 a -> Tree2 a -> Tree2 a deriving (Show)
+
+RS.makeBaseFunctor ''Tree2
+
 {-
 We begin by unfolding to a Tree.
 unfold coalg :: ([a] -> Tree a) ~ ([a] -> Fix (TreeF a))
@@ -304,13 +313,41 @@ toTreeAlg
   -> ListF a (TreeF a [a])
   -> TreeF a [a]
 toTreeAlg _   _ Nil                 = TipF
-toTreeAlg _   _ (Cons a TipF      ) = LeafF a
-toTreeAlg cmp f (Cons a (LeafF a')) = case cmp a a' of
+toTreeAlg _   _ (Cons !a TipF      ) = LeafF a
+toTreeAlg cmp f (Cons !a (LeafF !a')) = case cmp a a' of
   LT -> ForkF [a] [a']
   GT -> ForkF [a'] [a]
   EQ -> LeafF (f a a')
-toTreeAlg cmp f (Cons a (ForkF ls rs)) = ForkF (a : rs) ls
+toTreeAlg cmp f (Cons !a (ForkF ls rs)) = ForkF (a : rs) ls
 
+toTreeCoAlg2
+  :: (a -> a -> Ordering)
+  -> (a -> a -> a)
+  -> [a]
+  -> Tree2F a [a]
+toTreeCoAlg2 _   _ []     = Tip2F
+toTreeCoAlg2 _   _ [a]    = Leaf2F a
+toTreeCoAlg2 cmp f (a:as) =
+  let (l,r,s) = L.foldl' (\(xs,ys,ss) b -> case cmp a b of LT -> (b:xs,ys,ss); EQ -> (xs,ys,b:ss); GT -> (xs,b:ys,ss)) ([],[],[a]) as
+      !fs = L.foldl1 f s --where to put that?? -> extended datatype
+   in Fork2F fs l r
+{-# INLINE toTreeCoAlg2 #-}
+
+toListAlg2
+  :: Tree2F a (DList a)
+  -> DList a
+toListAlg2 Tip2F        = []
+toListAlg2 (Leaf2F a)   = [a]
+toListAlg2 (Fork2F c l r) = l <> [c] <> r
+{-# INLINE toListAlg2 #-}
+
+foo :: Ord a => [a] -> [a]
+foo = DL.toList . hylo toListAlg2 (toTreeCoAlg2 compare const)
+
+groupByFoo :: Ord k => [(k,v)] -> [(k,[v])]
+groupByFoo =
+  unDList . DL.toList . hylo toListAlg2 (toTreeCoAlg2 (compare `on` fst) (\(k,vs) (_,vs') -> (k,vs<>vs'))) . fmap promote
+{-# INLINE groupByFoo #-}
 
 toTreeCoalg :: (a -> a -> Ordering) -> (a -> a -> a) -> [a] -> TreeF a [a]
 toTreeCoalg cmp f = RS.fold (toTreeAlg cmp f)
@@ -328,7 +365,7 @@ toListCoalg
   -> TreeF a [a]
   -> ListF a (TreeF a [a])
 toListCoalg _   _ TipF                        = Nil
-toListCoalg _   _ (LeafF a                  ) = Cons a TipF
+toListCoalg _   _ (LeafF !a                 ) = Cons a TipF
 toListCoalg _   _ (ForkF []       []        ) = Nil
 toListCoalg _   _ (ForkF (a : as) []        ) = Cons a (ForkF [] as)
 toListCoalg _   _ (ForkF []       (a  : as )) = Cons a (ForkF [] as)
@@ -336,17 +373,17 @@ toListCoalg cmp f (ForkF (a : as) (a' : as')) = case cmp a a' of
   LT -> Cons a (ForkF as (a' : as'))
   GT -> Cons a' (ForkF (a : as) as')
   EQ -> Cons (f a a') (ForkF as as')
-{-# INLINABLE toListCoalg #-}
+{-# INLINE toListCoalg #-}
 
 toListAlg :: (a -> a -> Ordering) -> (a -> a -> a) -> TreeF a [a] -> [a]
 toListAlg cmp f = RS.unfold (toListCoalg cmp f)
-{-# INLINABLE toListAlg #-}
+{-# INLINE toListAlg #-}
 
 
 groupByTree1 :: Ord k => [(k, v)] -> [(k, [v])]
 groupByTree1 =
   unDList . RS.hylo (specify toListAlg) (specify toTreeCoalg) . fmap promote
-{-# INLINABLE groupByTree1 #-}
+{-# INLINE groupByTree1 #-}
 
 {-
 treeCoalg
@@ -377,16 +414,16 @@ so the algebra has the form ListF (k,v) [(k,[v])] -> [(k,[v])] or ListF (k,v) [(
 -}
 alg2 :: Ord k => ListF (k, v) [(k, [v])] -> [(k, [v])]
 alg2 Nil                           = []
-alg2 (Cons (k, v) []             ) = [(k, [v])]
-alg2 (Cons (k, v) ((k', vs) : xs)) = case compare k k' of
+alg2 (Cons (!k, !v) []             ) = [(k, [v])]
+alg2 (Cons (!k, !v) ((!k', !vs) : xs)) = case compare k k' of
   LT -> (k, [v]) : (k', vs) : xs
   GT -> (k', vs) : alg2 (Cons (k, v) xs)
   EQ -> (k, v : vs) : xs
-{-# INLINABLE alg2 #-}
+{-# INLINE alg2 #-}
 
 groupByNaiveInsert2 :: Ord k => [(k, v)] -> [(k, [v])]
 groupByNaiveInsert2 = RS.fold alg2
-{-# INLINABLE groupByNaiveInsert2 #-}
+{-# INLINE groupByNaiveInsert2 #-}
 
 
 
@@ -420,7 +457,7 @@ groupByHR
         begin = ([], Nothing)
         done  = fst
     in  FL.fold fld . L.sortBy (compare `on` fst)
-{-# INLINABLE groupByHR #-}
+{-# INLINE groupByHR #-}
 
 
 
@@ -429,28 +466,28 @@ groupByHR
 -- list merge, preserving ordering of keys and using semigroup (<>) when keys are equal
 groupByTVL :: Ord k => [(k, v)] -> [(k, [v])]
 groupByTVL = mergeSortUnion . fmap (second $ pure @[])
-{-# INLINABLE groupByTVL #-}
+{-# INLINE groupByTVL #-}
 
 mergeSemi :: (Ord k, Semigroup w) => [(k, w)] -> [(k, w)] -> [(k, w)]
 mergeSemi = unionByWith (\a b -> compare (fst a) (fst b))
                         (\(k, w1) (_, w2) -> (k, w1 <> w2))
-{-# INLINABLE mergeSemi #-}
+{-# INLINE mergeSemi #-}
 
 unionByWith :: (a -> a -> Ordering) -> (a -> a -> a) -> [a] -> [a] -> [a]
 unionByWith cmp f = mergeByR cmp (\a b c -> f a b : c) (:) (:) []
-{-# INLINABLE unionByWith #-}
+{-# INLINE unionByWith #-}
 
 split :: [a] -> ([a], [a])
 split (x : y : zs) = let (xs, ys) = split zs in (x : xs, y : ys)
 split xs           = (xs, [])
-{-# INLINABLE split #-}
+{-# INLINE split #-}
 
 mergeSortUnion :: Ord k => [(k, [v])] -> [(k, [v])]
 mergeSortUnion []  = []
 mergeSortUnion [x] = [x]
 mergeSortUnion xs =
   let (ys, zs) = split xs in mergeSemi (mergeSortUnion ys) (mergeSortUnion zs)
-{-# INLINABLE mergeSortUnion #-}
+{-# INLINE mergeSortUnion #-}
 
 mergeByR
   :: (a -> b -> Ordering)  -- ^ cmp: Comparison function
@@ -469,6 +506,6 @@ mergeByR cmp fxy fx fy z = go
     LT -> fx x (go xs (y : ys))
     EQ -> fxy x y (go xs ys)
     GT -> fy y (go (x : xs) ys)
-{-# INLINABLE mergeByR #-}
+{-# INLINE mergeByR #-}
 
 

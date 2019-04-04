@@ -79,6 +79,15 @@ mapReduceList = FL.fold
   )
 {-# INLINE mapReduceList #-}
 
+mapReduceListFoo :: Foldable g => g (Char, Int) -> [(Char, Double)]
+mapReduceListFoo = FL.fold
+  (MRL.listEngine MRG.groupByFoo
+                  (MR.Filter filterPF)
+                  (MR.Assign id)
+                  (MR.Reduce reducePF)
+  )
+{-# INLINE mapReduceListFoo #-}
+
 mapReduceListTVL :: Foldable g => g (Char, Int) -> [(Char, Double)]
 mapReduceListTVL = FL.fold
   (MRL.listEngine MRG.groupByTVL
@@ -125,6 +134,7 @@ benchOne dat = bgroup
   [ bench "direct" $ nf direct dat
   , bench "directFoldl" $ nf directFoldl dat
   , bench "mapReduce ([] Engine, strict hash map)" $ nf mapReduceList dat
+  , bench "mapReduce ([] Engine, Ord, group by Foo)" $ nf mapReduceListFoo dat
   , bench "mapReduce ([] Engine, Ord, group by TVL)" $ nf mapReduceListTVL dat
   , bench "mapReduce (Streaming.Stream Engine, strict hash map)"
     $ nf mapReduceStream dat
@@ -177,6 +187,14 @@ mapReduce2List = FL.fold
                   (MR.foldAndRelabel reduceMFold (\k x -> (k, x)))
   )
 
+mapReduce2ListFoo :: Foldable g => g (M.Map T.Text Int) -> [(Int, Double)]
+mapReduce2ListFoo = FL.fold
+  (MRL.listEngine MRG.groupByFoo
+                  (MR.Unpack unpackMF)
+                  (MR.Assign assignMF)
+                  (MR.foldAndRelabel reduceMFold (\k x -> (k, x)))
+  )
+
 mapReduce2ListTVL :: Foldable g => g (M.Map T.Text Int) -> [(Int, Double)]
 mapReduce2ListTVL = FL.fold
   (MRL.listEngine MRG.groupByTVL
@@ -216,8 +234,10 @@ benchTwo dat = bgroup
   [ bench "direct" $ nf directM dat
   , bench "map-reduce-fold ([] Engine, strict hash map, serial)"
     $ nf mapReduce2List dat
+  , bench "map-reduce-fold ([] Engine, Ord, groupBy Foo)"
+    $ nf mapReduce2ListTVL dat
   , bench "map-reduce-fold ([] Engine, Ord, groupBy TVL)"
-    $ nf mapReduce2List dat
+    $ nf mapReduce2ListTVL dat
   , bench "map-reduce-fold (Streaming.Stream Engine, strict hash map, serial)"
     $ nf mapReduce2Stream dat
   , bench "map-reduce-fold (Data.Vector Engine, strict hash map, serial)"

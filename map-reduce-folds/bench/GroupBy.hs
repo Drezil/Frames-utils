@@ -102,6 +102,10 @@ rsTree1 :: [(Char, Int)] -> [(Char, [Int])]
 rsTree1 = MRG.groupByTree1
 {-# INLINE rsTree1 #-}
 
+rsTreeFoo :: [(Char, Int)] -> [(Char, [Int])]
+rsTreeFoo = MRG.groupByFoo
+{-# INLINE rsTreeFoo #-}
+
 rsNaiveInsert2 :: [(Char, Int)] -> [(Char, [Int])]
 rsNaiveInsert2 = MRG.groupByNaiveInsert2
 {-# INLINE rsNaiveInsert2 #-}
@@ -139,6 +143,7 @@ toTry =
 -}
   , ("recursion-schemes, naive insert (grouping swap version)", rsNaiveInsert')
   , ("recursion-schemes, naive bubble (grouping swap version)", rsNaiveBubble')
+  , ("recursion-schemes, foo (grouping version)", rsTreeFoo)
 {-
     , ("recursion-schemes, insert (fold of grouping apo)"   , rsInsert)
 
